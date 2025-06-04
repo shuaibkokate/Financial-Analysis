@@ -1,10 +1,16 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
 from prophet import Prophet
 from sklearn.ensemble import IsolationForest, RandomForestRegressor
 from sklearn.preprocessing import LabelEncoder
-import plotly.express as px
+import os
+
+# Optional: for LLM query
+from langchain.chat_models import ChatOpenAI
+from langchain.agents import create_pandas_dataframe_agent
+from langchain.agents.agent_types import AgentType
 
 # -------------------------------
 # Load and prepare data
@@ -17,16 +23,14 @@ def load_data():
     return df
 
 # -------------------------------
-# Forecasting using Prophet
+# Forecasting
 # -------------------------------
 def forecast_budget(df, department, category):
     filtered = df[(df['Department'] == department) & (df['Category'] == category)]
     timeseries = filtered.groupby("Date").sum().reset_index()[['Date', 'Actual_Spend']]
     timeseries.columns = ['ds', 'y']
-
     if len(timeseries) < 2:
         return None
-
     model = Prophet()
     model.fit(timeseries)
     future = model.make_future_dataframe(periods=3, freq='M')
@@ -51,31 +55,12 @@ def ai_risk_score(df):
     le_cat = LabelEncoder()
     df['DeptCode'] = le_dept.fit_transform(df['Department'])
     df['CatCode'] = le_cat.fit_transform(df['Category'])
-
     X = df[['Allocated_Budget', 'Actual_Spend', 'DeptCode', 'CatCode']]
     y = (df['Variance_%'] > 10).astype(int)
-
     model = RandomForestRegressor()
     model.fit(X, y)
     df['AI_Risk_Score'] = model.predict(X)
-
     return df.sort_values("AI_Risk_Score", ascending=False)
-
-# -------------------------------
-# NLP-like Query Parser
-# -------------------------------
-def handle_query(query, df):
-    q = query.lower()
-    if "over budget" in q:
-        return df[df['Variance'] > 0]
-    elif "under budget" in q:
-        return df[df['Variance'] < 0]
-    elif "anomalies" in q:
-        return detect_anomalies(df)
-    elif "high risk" in q:
-        return ai_risk_score(df).head(10)
-    else:
-        return "❌ Sorry, I didn't understand your query."
 
 # -------------------------------
 # Streamlit UI
@@ -92,11 +77,17 @@ try:
     category = st.sidebar.selectbox("Select Category", df['Category'].unique())
     filtered = df[(df['Department'] == department) & (df['Category'] == category)]
 
-    # Tabs for features
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "📉 Variance", "📈 Forecasting", "🚨 Anomalies", "⚠️ AI Risk & NLP"])
+    # Tabs
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📊 Overview",
+        "📉 Variance",
+        "📈 Forecasting",
+        "🚨 Anomalies",
+        "🧠 AI Risk & LLM Queries"
+    ])
 
     with tab1:
-        st.subheader("📊 Full Data Overview")
+        st.subheader("📊 Full Budget Dataset")
         st.dataframe(df, use_container_width=True)
 
     with tab2:
@@ -122,15 +113,27 @@ try:
             st.info("✅ No anomalies detected.")
 
     with tab5:
-        st.subheader("⚠️ AI-Based Risk Scores")
+        st.subheader("⚠️ AI Risk Scores")
         risk_df = ai_risk_score(df)
         st.dataframe(risk_df[['Department', 'Category', 'Date', 'Variance_%', 'AI_Risk_Score']].head(10))
 
-        st.subheader("💬 Ask AI a Question")
-        query = st.text_input("Examples: 'Show over budget', 'Show high risk', 'Show anomalies'")
+        st.subheader("🧠 Ask Anything (LLM-Powered Query)")
+        query = st.text_area("Type your question:", placeholder="e.g., Show total spend by department in 2024")
+
         if query:
-            result = handle_query(query, df)
-            st.write(result)
+            api_key = os.getenv("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")
+            if not api_key:
+                st.error("❌ Please set your OpenAI API key as environment variable: `OPENAI_API_KEY`.")
+            else:
+                try:
+                    with st.spinner("🧠 Thinking..."):
+                        llm = ChatOpenAI(model_name="gpt-4", temperature=0, openai_api_key=api_key)
+                        agent = create_pandas_dataframe_agent(llm, df, agent_type=AgentType.OPENAI_FUNCTIONS, verbose=False)
+                        response = agent.run(query)
+                        st.success("✅ Done")
+                        st.write(response)
+                except Exception as e:
+                    st.error(f"⚠️ Error: {str(e)}")
 
 except FileNotFoundError:
     st.error("❌ 'generated_5_year_budget_data.csv' not found in the current directory.")
