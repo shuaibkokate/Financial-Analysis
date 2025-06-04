@@ -7,8 +7,8 @@ from sklearn.ensemble import IsolationForest, RandomForestRegressor
 from sklearn.preprocessing import LabelEncoder
 import os
 
-# Optional: for LLM query
-from langchain.chat_models import ChatOpenAI
+# ✅ Updated LLM import
+from langchain_community.chat_models import ChatOpenAI
 from langchain.agents import create_pandas_dataframe_agent
 from langchain.agents.agent_types import AgentType
 
@@ -23,7 +23,7 @@ def load_data():
     return df
 
 # -------------------------------
-# Forecasting
+# Forecasting using Prophet
 # -------------------------------
 def forecast_budget(df, department, category):
     filtered = df[(df['Department'] == department) & (df['Category'] == category)]
@@ -71,7 +71,6 @@ st.title("🤖 AI-Powered Financial Analysis Dashboard")
 try:
     df = load_data()
 
-    # Sidebar Filters
     st.sidebar.header("🔍 Filter")
     department = st.sidebar.selectbox("Select Department", df['Department'].unique())
     category = st.sidebar.selectbox("Select Category", df['Category'].unique())
@@ -118,7 +117,7 @@ try:
         st.dataframe(risk_df[['Department', 'Category', 'Date', 'Variance_%', 'AI_Risk_Score']].head(10))
 
         st.subheader("🧠 Ask Anything (LLM-Powered Query)")
-        query = st.text_area("Type your question:", placeholder="e.g., Show total spend by department in 2024")
+        query = st.text_area("Type your question:", placeholder="e.g., Show average spend per department in 2024")
 
         if query:
             api_key = os.getenv("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")
