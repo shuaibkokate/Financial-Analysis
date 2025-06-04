@@ -6,3 +6,5 @@ plotly
 prophet
 openai
 langchain
+langchain-community
+langchain-openai
