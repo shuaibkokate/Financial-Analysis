@@ -120,7 +120,7 @@ try:
         query = st.text_area("Type your question:", placeholder="e.g., Show average spend per department in 2024")
 
         if query:
-            api_key = os.getenv("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")
+            api_key = os.getenv("")
             if not api_key:
                 st.error("❌ Please set your OpenAI API key as environment variable: `OPENAI_API_KEY`.")
             else:
