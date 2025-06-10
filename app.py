@@ -9,7 +9,7 @@ import os
 
 # ✅ Updated LLM import
 from langchain_community.chat_models import ChatOpenAI
-from langchain.agents import create_pandas_dataframe_agent
+from langchain_experimental.agents import create_pandas_dataframe_agent
 from langchain.agents.agent_types import AgentType
 
 # -------------------------------
@@ -27,7 +27,7 @@ def load_data():
 # -------------------------------
 def forecast_budget(df, department, category):
     filtered = df[(df['Department'] == department) & (df['Category'] == category)]
-    timeseries = filtered.groupby("Date").sum().reset_index()[['Date', 'Actual_Spend']]
+    timeseries = filtered.groupby("Date", as_index=False)['Actual_Spend'].sum()
     timeseries.columns = ['ds', 'y']
     if len(timeseries) < 2:
         return None
@@ -117,22 +117,21 @@ try:
         st.dataframe(risk_df[['Department', 'Category', 'Date', 'Variance_%', 'AI_Risk_Score']].head(10))
 
         st.subheader("🧠 Ask Anything (LLM-Powered Query)")
-        query = st.text_area("Type your question:", placeholder="e.g., Show average spend per department in 2024")
+        api_key = st.text_input("🔑 Enter your OpenAI API Key", type="password", help="This is required to run LLM queries.")
+        query = st.text_area("🧠 Type your question:", placeholder="e.g., Show average spend per department in 2024")
 
-        if query:
-            api_key = os.getenv("")
-            if not api_key:
-                st.error("❌ Please set your OpenAI API key as environment variable: `OPENAI_API_KEY`.")
-            else:
-                try:
-                    with st.spinner("🧠 Thinking..."):
-                        llm = ChatOpenAI(model_name="gpt-4", temperature=0, openai_api_key=api_key)
-                        agent = create_pandas_dataframe_agent(llm, df, agent_type=AgentType.OPENAI_FUNCTIONS, verbose=False)
-                        response = agent.run(query)
-                        st.success("✅ Done")
-                        st.write(response)
-                except Exception as e:
-                    st.error(f"⚠️ Error: {str(e)}")
+        if query and api_key:
+            try:
+                with st.spinner("🧠 Thinking..."):
+                    llm = ChatOpenAI(model_name="gpt-4", temperature=0, openai_api_key=api_key)
+                    agent = create_pandas_dataframe_agent(llm, df, agent_type=AgentType.OPENAI_FUNCTIONS, verbose=False)
+                    response = agent.run(query)
+                    st.success("✅ Done")
+                    st.write(response)
+            except Exception as e:
+                st.error(f"⚠️ Error: {str(e)}")
+        elif query and not api_key:
+            st.warning("⚠️ Please enter your OpenAI API key to run the query.")
 
 except FileNotFoundError:
     st.error("❌ 'generated_5_year_budget_data.csv' not found in the current directory.")
